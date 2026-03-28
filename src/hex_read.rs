@@ -16,50 +16,56 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-use std::io::{stdout, BufWriter, Write};
 use crate::args::Args;
+use std::io::{BufWriter, Write, stdout};
 
 const RESET: &str = "\x1b[0m";
 const GREEN: &str = "\x1b[32m";
 const BRIGHT_BLACK: &str = "\x1b[90m";
 const BRIGHT_WHITE: &str = "\x1b[97m";
 
-pub fn to_hex(bytes: &[u8]) -> String {
-    bytes.iter()
-        .map(|b| format!("{:02x}", b))
-        .collect::<Vec<_>>()
-        .join(" ")
+fn write_hex(out: &mut impl Write, bytes: &[u8]) {
+    let mut first = true;
+    for &b in bytes {
+        if !first {
+            out.write_all(b" ").unwrap();
+        }
+        write!(out, "{:02x}", b).unwrap();
+        first = false;
+    }
 }
 
-pub fn to_hex_colored(bytes: &[u8]) -> String {
-    bytes.iter()
-        .map(|&b| match b {
-            0x00 => format!("{}{:02x}{}", BRIGHT_BLACK, b, RESET),
-            32..=126 => format!("{}{:02x}{}", GREEN, b, RESET),
-            0xFF => format!("{}{:02x}{}", BRIGHT_WHITE, b, RESET),
-            _ => format!("{:02x}", b),
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+fn write_hex_colored(out: &mut impl Write, bytes: &[u8]) {
+    let mut first = true;
+    for &b in bytes {
+        if !first {
+            out.write_all(b" ").unwrap();
+        }
+        match b {
+            0x00 => write!(out, "{}{:02x}{}", BRIGHT_BLACK, b, RESET).unwrap(),
+            32..=126 => write!(out, "{}{:02x}{}", GREEN, b, RESET).unwrap(),
+            0xFF => write!(out, "{}{:02x}{}", BRIGHT_WHITE, b, RESET).unwrap(),
+            _ => write!(out, "{:02x}", b).unwrap(),
+        }
+        first = false;
+    }
 }
 
-pub fn to_ascii(bytes: &[u8]) -> String {
-    bytes.iter()
-        .map(|&b| match b {
-            32..=126 => (b as char).to_string(),
-            _ => ".".to_string(),
-        })
-        .collect()
+fn write_ascii(out: &mut impl Write, bytes: &[u8]) {
+    for &b in bytes {
+        let c: u8 = if (32..=126).contains(&b) { b } else { b'.' };
+        out.write_all(&[c]).unwrap();
+    }
 }
 
-pub fn to_ascii_color(bytes: &[u8]) -> String {
-    bytes.iter()
-        .map(|&b| match b {
-            0x00 => format!("{}.{}", BRIGHT_BLACK, RESET),
-            32..=126 => format!("{}{}{}", GREEN, b as char, RESET),
-            _ => ".".to_string(),
-        })
-        .collect()
+fn write_ascii_colored(out: &mut impl Write, bytes: &[u8]) {
+    for &b in bytes {
+        match b {
+            0x00 => write!(out, "{}.{}", BRIGHT_BLACK, RESET).unwrap(),
+            32..=126 => write!(out, "{}{}{}", GREEN, b as char, RESET).unwrap(),
+            _ => out.write_all(b".").unwrap(),
+        }
+    }
 }
 
 fn visual_len(s: &str) -> usize {
@@ -76,9 +82,15 @@ fn visual_len(s: &str) -> usize {
 
 fn draw_table_header(out: &mut impl Write, args: &Args) {
     let mut parts: Vec<&str> = vec![];
-    if !args.offsets_no { parts.push("offset"); }
-    if !args.no_hex { parts.push("00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f"); }
-    if !args.ascii_no { parts.push("ascii\t\t"); }
+    if !args.offsets_no {
+        parts.push("offset");
+    }
+    if !args.no_hex {
+        parts.push("00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f");
+    }
+    if !args.ascii_no {
+        parts.push("ascii\t\t");
+    }
 
     let header = parts.join("\t\t");
     let separator = "─".repeat(visual_len(&header));
@@ -87,42 +99,43 @@ fn draw_table_header(out: &mut impl Write, args: &Args) {
     writeln!(out, "{}", separator).unwrap();
 }
 
-fn offset_width(buf_size: usize) -> usize {
-    if buf_size == 0 { return 8; }
-    let hex_digits = (usize::BITS - buf_size.leading_zeros()) as usize;
-    let tetrads = (hex_digits + 3) / 4;
-    tetrads.max(8)
-}
+fn print_row(out: &mut impl Write, args: &Args, offset: usize, data: &[u8]) {
+    if !args.offsets_no {
+        write!(out, "{:08x}\t", offset).unwrap();
+    }
 
-fn print_row(out: &mut impl Write, args: &Args, offset: usize, width: usize, data: &[u8]) {
-    let offset_str = if args.offsets_no {
-        "".to_string()
-    } else {
-        format!("{:0width$x}\t", offset)
-    };
-    let hex_str = if args.no_hex {
-        "".to_string()
-    } else {
-        let hex = if args.color_no { to_hex(data) } else { to_hex_colored(data) };
+    if !args.no_hex {
+        if args.color_no {
+            write_hex(out, data);
+        } else {
+            write_hex_colored(out, data);
+        }
+
         let padding = (16 - data.len()) * 3;
-        format!("{}{}\t\t", hex, " ".repeat(padding))
-    };
-    let ascii_str = if args.ascii_no {
-        "".to_string()
-    } else if args.color_no {
-        to_ascii(data)
-    } else {
-        to_ascii_color(data)
-    };
-    writeln!(out, "{}{}{}", offset_str, hex_str, ascii_str).unwrap();
+        for _ in 0..padding {
+            out.write_all(b" ").unwrap();
+        }
+        out.write_all(b"\t\t").unwrap();
+    }
+
+    if !args.ascii_no {
+        if args.color_no {
+            write_ascii(out, data);
+        } else {
+            write_ascii_colored(out, data);
+        }
+    }
+
+    out.write_all(b"\n").unwrap();
 }
 
 pub fn dump_hex(bytes: &[u8], args: &Args) {
     let stdout = stdout();
     let mut out = BufWriter::new(stdout.lock());
-    if !args.disable_header { draw_table_header(&mut out, args); }
-    let width = offset_width(bytes.len());
+    if !args.disable_header {
+        draw_table_header(&mut out, args);
+    }
     for (i, chunk) in bytes.chunks(16).enumerate() {
-        print_row(&mut out, args, i * 16, width, chunk);
+        print_row(&mut out, args, i * 16, chunk);
     }
 }

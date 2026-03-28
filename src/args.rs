@@ -16,16 +16,16 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+use clap::Parser;
 use std::io;
 use std::io::Read;
-use clap::Parser;
 
 /// a TUI hex editor/dumper
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Args {
     /// This disables the interactive TUI interface (read-only)
-    #[arg(short,long)]
+    #[arg(short, long)]
     pub tui_no: bool,
     /// This disables the table header
     #[arg(short, long)]
@@ -46,7 +46,7 @@ pub struct Args {
     #[arg(short, long)]
     pub force_large: bool,
     /// The file name to read from
-    pub file_name: Option<String> // option cus sometimes we want to push into stdin data.
+    pub file_name: Option<String>, // option cus sometimes we want to push into stdin data.
 }
 
 impl Args {
@@ -56,11 +56,14 @@ impl Args {
             Some(path) => {
                 let size = std::fs::metadata(path)?.len();
                 if size > 100 * 1024 * 1024 && !self.force_large {
-                    eprintln!("\x1b[31;1merror: \x1b[0;1mfile is too large ({}MB), use --force-large to open anyway\x1b[0m", size / 1024 / 1024);
+                    eprintln!(
+                        "\x1b[31;1merror: \x1b[0;1mfile is too large ({}MB), use --force-large to open anyway\x1b[0m",
+                        size / 1024 / 1024
+                    );
                     std::process::exit(1);
                 }
                 std::fs::read(path)
-            },
+            }
             None => {
                 let mut buf = Vec::new();
                 io::stdin().read_to_end(&mut buf)?;
@@ -71,7 +74,7 @@ impl Args {
 
     /// this checks for everything being disabled
     /// the name is a joke, if you are offended then I apologize <3
-    pub fn fool_check(&self) -> bool  {
+    pub fn fool_check(&self) -> bool {
         self.ascii_no && self.no_hex && self.offsets_no // passed the fool check
     }
 }

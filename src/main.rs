@@ -17,9 +17,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 use clap::Parser;
-
-mod args;
-mod hex_read;
+use hexi::args;
+use hexi::hex_read;
 
 fn main() -> Result<(), u8> {
     let args = args::Args::parse();
@@ -28,7 +27,9 @@ fn main() -> Result<(), u8> {
         return Err(2);
     }
     if !args.tui_no {
-        eprintln!("\x1b[1;33mwarn: \x1b[0;1mTUI is not implemented yet. using dump mode (use -t)\x1b[0m");
+        eprintln!(
+            "\x1b[1;33mwarn: \x1b[0;1mTUI is not implemented yet. using dump mode (use -t)\x1b[0m"
+        );
     }
     let data = args.read_input().unwrap();
     hex_read::dump_hex(&*data, &args);
