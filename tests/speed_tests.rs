@@ -5,16 +5,6 @@ use std::time::Instant;
 #[test]
 fn file_read_speed() {
     // test reading a reasonable file size
-    let args = Args {
-        tui_no: false,
-        disable_header: false,
-        color_no: true,
-        offsets_no: false,
-        no_hex: false,
-        ascii_no: false,
-        force_large: false,
-        file_name: None,
-    };
 
     let start = Instant::now();
     // create some dummy data like we'd read from a file

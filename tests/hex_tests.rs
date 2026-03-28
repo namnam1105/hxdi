@@ -1,6 +1,5 @@
 use hexi::args::Args;
 use hexi::hex_read::dump_hex;
-use std::io::Cursor;
 use std::time::Instant;
 
 #[test]
