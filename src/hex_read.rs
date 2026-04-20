@@ -242,21 +242,24 @@ fn print_row(
     out.write_all(b"\n").unwrap();
 }
 
-pub fn dump_hex(bytes: &[u8], args: &Args) {
-    let stdout = stdout();
-    // 64 KB buffer reduces system call frequency vs the default 8 KB
-    let mut out = BufWriter::with_capacity(1 << 16, stdout.lock());
+pub fn dump_hex_to<W: Write>(bytes: &[u8], args: &Args, out: &mut W) {
     if !args.disable_header {
-        draw_table_header(&mut out, args);
+        draw_table_header(out, args);
     }
 
-    // Hoist flag evaluation out of the hot loop
     let show_offset = !args.offsets_no;
     let show_hex = !args.no_hex;
     let show_ascii = !args.ascii_no;
     let colored = !args.color_no;
 
     for (i, chunk) in bytes.chunks(16).enumerate() {
-        print_row(&mut out, show_offset, show_hex, show_ascii, colored, i * 16, chunk);
+        print_row(out, show_offset, show_hex, show_ascii, colored, i * 16, chunk);
     }
+}
+
+pub fn dump_hex(bytes: &[u8], args: &Args) {
+    let stdout = stdout();
+    // 64 KB buffer reduces system call frequency vs the default 8 KB
+    let mut out = BufWriter::with_capacity(1 << 16, stdout.lock());
+    dump_hex_to(bytes, args, &mut out);
 }
