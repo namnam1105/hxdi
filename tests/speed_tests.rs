@@ -88,7 +88,7 @@ fn colored_output_speed() {
 #[test]
 fn very_large_dump() {
     // what happens with a big chunk
-    let data = vec![0x42u8; 10 * 1024 * 1024]; // 10MB
+    let data = vec![0x67u8; 10 * 1024 * 1024]; // 10MB
 
     let args = Args {
         tui_no: false,

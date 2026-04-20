@@ -2,7 +2,13 @@ use hexi::args::Args;
 use hexi::hex_read::{dump_hex, dump_hex_to};
 use std::time::Instant;
 
-fn args(disable_header: bool, color_no: bool, offsets_no: bool, no_hex: bool, ascii_no: bool) -> Args {
+fn args(
+    disable_header: bool,
+    color_no: bool,
+    offsets_no: bool,
+    no_hex: bool,
+    ascii_no: bool,
+) -> Args {
     Args {
         tui_no: false,
         disable_header,
@@ -70,7 +76,10 @@ fn exactly_16_bytes_produces_one_row_no_padding() {
 fn header_present_by_default() {
     let out = render(b"x", &args(false, true, false, false, false));
     assert!(out.contains("offset"), "header missing: {out:?}");
-    assert!(out.contains("ascii"), "header missing ascii column: {out:?}");
+    assert!(
+        out.contains("ascii"),
+        "header missing ascii column: {out:?}"
+    );
 }
 
 #[test]
@@ -82,7 +91,11 @@ fn header_omitted_when_disabled() {
 #[test]
 fn empty_input_renders_only_header_and_separator() {
     let out = render(b"", &args(false, true, false, false, false));
-    assert_eq!(out.lines().count(), 2, "expected header + separator only: {out:?}");
+    assert_eq!(
+        out.lines().count(),
+        2,
+        "expected header + separator only: {out:?}"
+    );
 }
 
 #[test]
@@ -98,7 +111,10 @@ fn ascii_no_flag_omits_ascii_column() {
     assert!(out.contains("41"), "hex should appear: {out:?}");
     // the literal char 'A' must not appear as an ASCII column entry
     let hex_line = out.lines().next().unwrap();
-    assert!(!hex_line.ends_with('A'), "ascii column should be absent: {out:?}");
+    assert!(
+        !hex_line.ends_with('A'),
+        "ascii column should be absent: {out:?}"
+    );
 }
 
 // ── color output ──────────────────────────────────────────────────────────────
@@ -114,19 +130,28 @@ fn printable_bytes_colored_green() {
 #[test]
 fn zero_bytes_colored_bright_black() {
     let out = render(b"\x00\x00", &args(true, false, true, false, true));
-    assert!(out.contains("\x1b[90m"), "missing bright-black escape: {out:?}");
+    assert!(
+        out.contains("\x1b[90m"),
+        "missing bright-black escape: {out:?}"
+    );
 }
 
 #[test]
 fn ff_bytes_colored_bright_white() {
     let out = render(b"\xff\xff", &args(true, false, true, false, true));
-    assert!(out.contains("\x1b[97m"), "missing bright-white escape: {out:?}");
+    assert!(
+        out.contains("\x1b[97m"),
+        "missing bright-white escape: {out:?}"
+    );
 }
 
 #[test]
 fn uncolored_output_has_no_ansi_escapes() {
     let out = render(b"Hello\x00\xff", &args(true, true, false, false, false));
-    assert!(!out.contains("\x1b["), "unexpected escape in uncolored output: {out:?}");
+    assert!(
+        !out.contains("\x1b["),
+        "unexpected escape in uncolored output: {out:?}"
+    );
 }
 
 // ── smoke / stability ─────────────────────────────────────────────────────────
@@ -139,9 +164,15 @@ fn dump_hex_does_not_panic_on_varied_input() {
 
 #[test]
 fn hex_dump_performance() {
-    let data = vec![0x42u8; 1024 * 1024]; // 1 MB
+    let mut data = vec![0x42u8; 1024 * 512]; // 0.5 MB
+    let mut six_seven_data = vec![0x67u8; 1024 * 512]; // 0.5 MB // this one was requested by ae7er on codeberg.
+    data.append(&mut six_seven_data);
     let a = args(false, true, false, false, false);
     let start = Instant::now();
     dump_hex(&data, &a);
-    assert!(start.elapsed().as_secs() < 5, "dump too slow: {:?}", start.elapsed());
+    assert!(
+        start.elapsed().as_secs() < 5,
+        "dump too slow: {:?}",
+        start.elapsed()
+    );
 }
