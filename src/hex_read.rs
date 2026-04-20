@@ -19,51 +19,151 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 use crate::args::Args;
 use std::io::{BufWriter, Write, stdout};
 
-const RESET: &str = "\x1b[0m";
-const GREEN: &str = "\x1b[32m";
-const BRIGHT_BLACK: &str = "\x1b[90m";
-const BRIGHT_WHITE: &str = "\x1b[97m";
+const RESET: &[u8] = b"\x1b[0m";
+const GREEN: &[u8] = b"\x1b[32m";
+const BRIGHT_BLACK: &[u8] = b"\x1b[90m";
+const BRIGHT_WHITE: &[u8] = b"\x1b[97m";
 
+const HEX_CHARS: &[u8; 16] = b"0123456789abcdef";
+// 48 spaces covers the maximum padding of 15 missing bytes * 3 chars = 45
+const SPACES: &[u8; 48] = b"                                                ";
+const DOTS: &[u8; 16] = b"................";
+
+#[inline(always)]
+fn hex_byte(b: u8) -> [u8; 2] {
+    [HEX_CHARS[(b >> 4) as usize], HEX_CHARS[(b & 0xf) as usize]]
+}
+
+// Builds "XX XX XX ..." into a stack buffer and writes it in one call.
 fn write_hex(out: &mut impl Write, bytes: &[u8]) {
-    let mut first = true;
-    for &b in bytes {
-        if !first {
-            out.write_all(b" ").unwrap();
-        }
-        write!(out, "{:02x}", b).unwrap();
-        first = false;
+    if bytes.is_empty() {
+        return;
     }
+    // Max 16 bytes: 2 hex chars + 15 * (1 space + 2 hex) = 47 bytes
+    let mut buf = [0u8; 47];
+    let hb = hex_byte(bytes[0]);
+    buf[0] = hb[0];
+    buf[1] = hb[1];
+    let mut pos = 2;
+    for &b in &bytes[1..] {
+        buf[pos] = b' ';
+        let hb = hex_byte(b);
+        buf[pos + 1] = hb[0];
+        buf[pos + 2] = hb[1];
+        pos += 3;
+    }
+    out.write_all(&buf[..pos]).unwrap();
 }
 
+// Writes colored hex, batching consecutive bytes that share the same color
+// category to minimize the number of escape-sequence writes.
 fn write_hex_colored(out: &mut impl Write, bytes: &[u8]) {
-    let mut first = true;
-    for &b in bytes {
-        if !first {
+    let mut i = 0;
+    while i < bytes.len() {
+        if i > 0 {
             out.write_all(b" ").unwrap();
         }
+        let b = bytes[i];
         match b {
-            0x00 => write!(out, "{}{:02x}{}", BRIGHT_BLACK, b, RESET).unwrap(),
-            32..=126 => write!(out, "{}{:02x}{}", GREEN, b, RESET).unwrap(),
-            0xFF => write!(out, "{}{:02x}{}", BRIGHT_WHITE, b, RESET).unwrap(),
-            _ => write!(out, "{:02x}", b).unwrap(),
+            0x00 => {
+                let start = i;
+                while i < bytes.len() && bytes[i] == 0x00 {
+                    i += 1;
+                }
+                out.write_all(BRIGHT_BLACK).unwrap();
+                for j in start..i {
+                    if j > start {
+                        out.write_all(b" ").unwrap();
+                    }
+                    out.write_all(&hex_byte(0x00)).unwrap();
+                }
+                out.write_all(RESET).unwrap();
+            }
+            32..=126 => {
+                let start = i;
+                while i < bytes.len() && (32..=126).contains(&bytes[i]) {
+                    i += 1;
+                }
+                out.write_all(GREEN).unwrap();
+                for j in start..i {
+                    if j > start {
+                        out.write_all(b" ").unwrap();
+                    }
+                    out.write_all(&hex_byte(bytes[j])).unwrap();
+                }
+                out.write_all(RESET).unwrap();
+            }
+            0xFF => {
+                let start = i;
+                while i < bytes.len() && bytes[i] == 0xFF {
+                    i += 1;
+                }
+                out.write_all(BRIGHT_WHITE).unwrap();
+                for j in start..i {
+                    if j > start {
+                        out.write_all(b" ").unwrap();
+                    }
+                    out.write_all(&hex_byte(0xFF)).unwrap();
+                }
+                out.write_all(RESET).unwrap();
+            }
+            _ => {
+                let start = i;
+                while i < bytes.len() && !matches!(bytes[i], 0x00 | 32..=126 | 0xFF) {
+                    i += 1;
+                }
+                for j in start..i {
+                    if j > start {
+                        out.write_all(b" ").unwrap();
+                    }
+                    out.write_all(&hex_byte(bytes[j])).unwrap();
+                }
+            }
         }
-        first = false;
     }
 }
 
+// Converts the chunk to printable chars in a stack buffer, then writes once.
 fn write_ascii(out: &mut impl Write, bytes: &[u8]) {
-    for &b in bytes {
-        let c: u8 = if (32..=126).contains(&b) { b } else { b'.' };
-        out.write_all(&[c]).unwrap();
+    let mut buf = [0u8; 16];
+    for (i, &b) in bytes.iter().enumerate() {
+        buf[i] = if (32..=126).contains(&b) { b } else { b'.' };
     }
+    out.write_all(&buf[..bytes.len()]).unwrap();
 }
 
+// Writes colored ASCII, batching consecutive printable bytes as a raw slice
+// (no per-char format overhead) and grouping dots under shared color escapes.
 fn write_ascii_colored(out: &mut impl Write, bytes: &[u8]) {
-    for &b in bytes {
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
         match b {
-            0x00 => write!(out, "{}.{}", BRIGHT_BLACK, RESET).unwrap(),
-            32..=126 => write!(out, "{}{}{}", GREEN, b as char, RESET).unwrap(),
-            _ => out.write_all(b".").unwrap(),
+            0x00 => {
+                let start = i;
+                while i < bytes.len() && bytes[i] == 0x00 {
+                    i += 1;
+                }
+                out.write_all(BRIGHT_BLACK).unwrap();
+                out.write_all(&DOTS[..i - start]).unwrap();
+                out.write_all(RESET).unwrap();
+            }
+            32..=126 => {
+                let start = i;
+                while i < bytes.len() && (32..=126).contains(&bytes[i]) {
+                    i += 1;
+                }
+                out.write_all(GREEN).unwrap();
+                out.write_all(&bytes[start..i]).unwrap();
+                out.write_all(RESET).unwrap();
+            }
+            _ => {
+                let start = i;
+                while i < bytes.len() && !matches!(bytes[i], 0x00 | 32..=126) {
+                    i += 1;
+                }
+                out.write_all(&DOTS[..i - start]).unwrap();
+            }
         }
     }
 }
@@ -99,30 +199,43 @@ fn draw_table_header(out: &mut impl Write, args: &Args) {
     writeln!(out, "{}", separator).unwrap();
 }
 
-fn print_row(out: &mut impl Write, args: &Args, offset: usize, data: &[u8]) {
-    if !args.offsets_no {
-        write!(out, "{:08x}\t", offset).unwrap();
+fn print_row(
+    out: &mut impl Write,
+    show_offset: bool,
+    show_hex: bool,
+    show_ascii: bool,
+    colored: bool,
+    offset: usize,
+    data: &[u8],
+) {
+    if show_offset {
+        // Write "XXXXXXXX\t" without format!() overhead
+        let mut buf = [0u8; 9];
+        let mut o = offset;
+        for i in (0..8).rev() {
+            buf[i] = HEX_CHARS[o & 0xf];
+            o >>= 4;
+        }
+        buf[8] = b'\t';
+        out.write_all(&buf).unwrap();
     }
 
-    if !args.no_hex {
-        if args.color_no {
-            write_hex(out, data);
-        } else {
+    if show_hex {
+        if colored {
             write_hex_colored(out, data);
+        } else {
+            write_hex(out, data);
         }
-
         let padding = (16 - data.len()) * 3;
-        for _ in 0..padding {
-            out.write_all(b" ").unwrap();
-        }
+        out.write_all(&SPACES[..padding]).unwrap();
         out.write_all(b"\t\t").unwrap();
     }
 
-    if !args.ascii_no {
-        if args.color_no {
-            write_ascii(out, data);
-        } else {
+    if show_ascii {
+        if colored {
             write_ascii_colored(out, data);
+        } else {
+            write_ascii(out, data);
         }
     }
 
@@ -131,11 +244,19 @@ fn print_row(out: &mut impl Write, args: &Args, offset: usize, data: &[u8]) {
 
 pub fn dump_hex(bytes: &[u8], args: &Args) {
     let stdout = stdout();
-    let mut out = BufWriter::new(stdout.lock());
+    // 64 KB buffer reduces system call frequency vs the default 8 KB
+    let mut out = BufWriter::with_capacity(1 << 16, stdout.lock());
     if !args.disable_header {
         draw_table_header(&mut out, args);
     }
+
+    // Hoist flag evaluation out of the hot loop
+    let show_offset = !args.offsets_no;
+    let show_hex = !args.no_hex;
+    let show_ascii = !args.ascii_no;
+    let colored = !args.color_no;
+
     for (i, chunk) in bytes.chunks(16).enumerate() {
-        print_row(&mut out, args, i * 16, chunk);
+        print_row(&mut out, show_offset, show_hex, show_ascii, colored, i * 16, chunk);
     }
 }
