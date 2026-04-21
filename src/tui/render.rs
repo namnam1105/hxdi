@@ -331,7 +331,7 @@ fn render_hints(f: &mut Frame, app: &App, area: Rect) {
         // Span::styled("^G", key),
         // Span::styled(" Goto  ", sep),
         // Span::styled("^E", key), // coming soon..
-        Span::styled(" Toggle  ", sep),
+        // Span::styled(" Toggle  ", sep),
         Span::styled("Tab", key),
         Span::styled(" Switch  ", sep),
         Span::styled(",./[]", key),

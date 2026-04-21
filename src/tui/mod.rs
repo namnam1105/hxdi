@@ -35,7 +35,6 @@ use std::io::stdout;
 
 use actions::Action;
 use app::App;
-use events::handle_event;
 
 pub fn run(
     data: Vec<u8>,
@@ -49,7 +48,15 @@ pub fn run(
     enable_raw_mode()?;
     execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
-    let mut app = App::new(data, file_name, color, show_header, show_offsets, show_hex, show_ascii);
+    let mut app = App::new(
+        data,
+        file_name,
+        color,
+        show_header,
+        show_offsets,
+        show_hex,
+        show_ascii,
+    );
     let result = run_loop(&mut terminal, &mut app);
     disable_raw_mode()?;
     execute!(
