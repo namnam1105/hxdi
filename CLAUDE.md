@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**hexi** is a performance-focused hex-dumper written in Rust, targeting near-C performance. Dump mode is fully implemented; a TUI hex-editor mode is planned but not yet started.
+**hexi** is a performance-focused hex-dumper and interactive TUI hex editor written in Rust, targeting near-C performance. Dump mode is fully implemented. TUI mode is implemented but incomplete (dialogs, editing, find/goto not yet wired).
 
 ## Commands
 
@@ -19,19 +19,52 @@ No clippy or rustfmt configuration exists; use defaults.
 
 ## Architecture
 
-Three source modules plus an integration test suite:
+### Modules
 
-- **`args.rs`** — CLI parsing (`clap` derive), input loading, and `fool_check()` validation (errors if all output columns are disabled). `read_input()` enforces a 100 MB file size limit; `--force-large` bypasses it.
-- **`hex_read.rs`** — Core rendering. This is the hot-path module. `dump_hex()` wraps stdout in a 64 KB `BufWriter` and calls `print_row()` for each 16-byte row. Color output batches consecutive same-category bytes into a single ANSI escape to minimise syscalls. All format work uses stack buffers, not `format!()`.
-- **`main.rs`** — Thin entry point: parse → validate → read → render.
+- **`args.rs`** — CLI parsing (`clap` derive), input loading, `fool_check()` (errors if all output columns disabled). `read_input()` enforces 100 MB limit; `--force-large` bypasses it.
+- **`hex_read.rs`** — Dump mode hot path. `dump_hex()` wraps stdout in 64 KB `BufWriter`, calls `print_row()` per 16-byte row. Color output batches consecutive same-category bytes into single ANSI escapes. All format work uses stack buffers, not `format!()`.
+- **`main.rs`** — Entry point: parse → `fool_check()` → read → branch on `tui_no` flag.
+- **`tui/`** — Interactive editor (ratatui + crossterm).
 
-Data flow: `Args::parse()` → `fool_check()` → `read_input()` → `dump_hex()` → `BufWriter<Stdout>`.
+### TUI module (`src/tui/`)
 
-The only external dependency is `clap 4.6`.
+| File | Responsibility |
+|------|---------------|
+| `mod.rs` | Terminal setup/teardown, `run_loop()` (16 ms poll, ~60 fps) |
+| `app.rs` | `App` struct — all mutable editor state, no ratatui imports |
+| `types.rs` | All enums: `EditMode`, `ActivePane`, `NibbleHalf`, `Dialog`, `UnsavedFocus`, `SearchMode`, `GotoMode`, plus `FindState`/`GotoState` |
+| `render.rs` | `draw()` dispatcher; layout computation; all ratatui rendering |
+| `events.rs` | `handle_event()` — dispatches by `app.dialog` then `app.active_pane`; mouse handling; copy via OSC 52 |
+| `actions.rs` | `Action` enum returned by event handler to `run_loop` |
 
-## Performance Conventions
+### Data flow
 
-`hex_read.rs` is deliberately low-level. When editing it:
+**Dump mode:** `Args::parse()` → `fool_check()` → `read_input()` → `dump_hex()` → `BufWriter<Stdout>`
+
+**TUI mode:** `Args::parse()` → `read_input()` → `tui::run()` → `run_loop` → `render::draw()` / `events::handle_event()`
+
+### Layout (TUI)
+
+5 vertical bands: `title(1) | separator(1) | header(0-1) | editor(fill) | hints(1)`
+
+Editor band horizontal split: `offset(dynamic) | hex(Min, stretches) | sep(0-1) | ascii(bpr+2)`
+
+`bytes_per_row` is computed each frame from actual hex pane width: `(hex_inner + 1) / 3`. `bpr_override: Option<usize>` locks it (`,`/`.` keys, mouse drag on separator).
+
+### Key state in `App`
+
+- `sel_anchor: Option<usize>` + `cursor: usize` → selection range via `sel_range()`
+- `bpr_override: Option<usize>` — None = auto-fill from width
+- `offset_extra: i16` — added to auto-computed offset digit count
+- `status_msg_until: Option<Instant>` — cleared by `run_loop` on expiry
+- Hit-test bounds (`hex_content_x/w`, `ascii_content_x/w`, `editor_content_y`) written each frame by `render::draw()`, read by `events.rs` for mouse-to-byte conversion
+
+### Performance conventions (`hex_read.rs`)
+
 - Keep flag checks hoisted outside the row loop.
-- Prefer stack-allocated byte arrays over `String`/`Vec` allocations inside hot loops.
-- The `speed_tests` integration tests encode explicit throughput budgets (e.g. 512 KB in <3 s, 10 MB in <10 s) — run them after any change to the rendering path.
+- Prefer stack-allocated byte arrays over `String`/`Vec` inside hot loops.
+- `speed_tests` integration tests encode explicit throughput budgets — run after any change to the rendering path.
+
+### Unimplemented stubs
+
+`Dialog::Find`, `Dialog::Goto`, `Dialog::UnsavedChanges` are defined in `types.rs` and triggered by keybinds but their render/event handlers are stubs (`_ => Action::None`). `EditMode::Insert` and `EditMode::ReadOnly` are defined but never constructed.
