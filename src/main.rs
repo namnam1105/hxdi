@@ -19,19 +19,27 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 use clap::Parser;
 use hexi::args;
 use hexi::hex_read;
+use hexi::tui;
 
-fn main() -> Result<(), u8> {
+fn main() -> std::io::Result<()> {
     let args = args::Args::parse();
     if args.fool_check() {
         eprintln!("\x1b[1;31merror: \x1b[0;1mwhy do you want to display nothing?\x1b[0m");
-        return Err(2);
-    }
-    if !args.tui_no {
-        eprintln!(
-            "\x1b[1;33mwarn: \x1b[0;1mTUI is not implemented yet. using dump mode (use -t)\x1b[0m"
-        );
+        std::process::exit(2);
     }
     let data = args.read_input().unwrap();
-    hex_read::dump_hex(&*data, &args);
+    if !args.tui_no {
+        tui::run(
+            data,
+            args.file_name,
+            !args.color_no,
+            !args.disable_header,
+            !args.offsets_no,
+            !args.no_hex,
+            !args.ascii_no,
+        )?;
+    } else {
+        hex_read::dump_hex(&*data, &args);
+    }
     Ok(())
 }
