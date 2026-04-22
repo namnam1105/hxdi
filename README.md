@@ -1,6 +1,6 @@
 # hexi
 
-hexi is a flexible hex-editor (not yet), allows flexible dumping options,
+hexi is a flexible hex-editor, allows flexible dumping options,
 written in Rust, having near C dumping performance.
 
 ## how 2 use and compile
@@ -34,6 +34,5 @@ Options:
 * [x] first working build
 * [x] readme
 * [x] license
-* [ ] unit tests
-* [ ] integrate `ratatui`
-
+* [x] unit tests
+* [x] integrate `ratatui`
