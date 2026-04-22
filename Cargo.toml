@@ -1,9 +1,13 @@
 [package]
-name = "hexi"
+name = "hxdi"
 version = "0.2.2"
 edition = "2024"
+description = "a fast, flexible hex editor with nano-style TUI"
 authors = ["namnam1105"]
-license = "GPL-3"
+license = "GPL-3.0"
+repository = "https://github.com/namnam1105/hxdi"
+keywords = ["hex","editor","tui","cli"]
+categories = ["command-line-utilies"]
 
 [dependencies]
 clap = { version = "4.6.0", features = ["derive"] }
