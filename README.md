@@ -6,6 +6,7 @@
 ![License](https://img.shields.io/crates/l/hxdi?style=for-the-badge)
 ![Version](https://img.shields.io/crates/v/hxdi?style=for-the-badge)
 ![Downloads](https://img.shields.io/crates/d/hxdi?style=for-the-badge)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/namnam1105/hxdi/release.yml?style=for-the-badge)
 
 *a fast, flexible hex editor for the terminal — written in Rust with near-C dump performance and a nano-style TUI.*
 
