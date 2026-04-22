@@ -1,5 +1,5 @@
-use hexi::args::Args;
-use hexi::hex_read::{dump_hex, dump_hex_to};
+use hxdi::args::Args;
+use hxdi::hex_read::{dump_hex, dump_hex_to};
 use std::time::Instant;
 
 fn args(

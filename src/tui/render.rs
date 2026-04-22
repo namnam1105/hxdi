@@ -139,8 +139,8 @@ fn render_title(f: &mut Frame, app: &App, area: Rect) {
     let dirty = if app.is_dirty() { " [Modified]" } else { "" };
     let name = app.file_name.as_deref().unwrap_or("stdin");
     let content = match &app.status_msg {
-        Some(msg) => format!(" hexi — {name}{dirty}  │  {msg}"),
-        None => format!(" hexi — {name}{dirty}"),
+        Some(msg) => format!(" hxdi — {name}{dirty}  │  {msg}"),
+        None => format!(" hxdi — {name}{dirty}"),
     };
     f.render_widget(Paragraph::new(content).style(Style::new().reversed()), area);
 }

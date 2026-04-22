@@ -1,4 +1,4 @@
-# testing in hexi
+# testing in hxdi
 
 run tests:
 ```bash

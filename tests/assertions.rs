@@ -1,4 +1,4 @@
-use hexi::args::Args;
+use hxdi::args::Args;
 use std::time::Instant;
 
 #[test]

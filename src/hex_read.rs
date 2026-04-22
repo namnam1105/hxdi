@@ -1,5 +1,5 @@
 /*
-hexi - a TUI hex editor
+hxdi - a TUI hex editor
 Copyright (C) 2026 namnam1105
 
 This program is free software: you can redistribute it and/or modify

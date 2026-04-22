@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**hexi** is a performance-focused hex-dumper and interactive TUI hex editor written in Rust, targeting near-C performance. Dump mode is fully implemented. TUI mode is implemented but incomplete (dialogs, editing, find/goto not yet wired).
+**hxdi** is a performance-focused hex-dumper and interactive TUI hex editor written in Rust, targeting near-C performance. Dump mode is fully implemented. TUI mode is implemented but incomplete (dialogs, editing, find/goto not yet wired).
 
 ## Commands
 

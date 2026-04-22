@@ -1,5 +1,5 @@
 /*
-hexi - a TUI hex editor
+hxdi - a TUI hex editor
 Copyright (C) 2026 namnam1105
 
 This program is free software: you can redistribute it and/or modify
@@ -19,9 +19,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 use std::io::ErrorKind;
 
 use clap::Parser;
-use hexi::args;
-use hexi::hex_read;
-use hexi::tui;
+use hxdi::args;
+use hxdi::hex_read;
+use hxdi::tui;
 
 fn main() -> std::io::Result<()> {
     let args = args::Args::parse();

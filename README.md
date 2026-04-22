@@ -1,6 +1,6 @@
-# hexi
+# hxdi
 
-hexi is a flexible hex-editor, allows flexible dumping options,
+hxdi is a flexible hex-editor, allows flexible dumping options,
 written in Rust, having near C dumping performance.
 
 ## how 2 use and compile
@@ -13,7 +13,7 @@ written in Rust, having near C dumping performance.
 
 ### use
 
-Usage: hexi [OPTIONS] [FILE_NAME]
+Usage: hxdi [OPTIONS] [FILE_NAME]
 
 Arguments:
 [FILE_NAME]  The file name to read from
