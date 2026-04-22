@@ -7,7 +7,6 @@ authors = ["namnam1105"]
 license = "GPL-3.0"
 repository = "https://github.com/namnam1105/hxdi"
 keywords = ["hex","editor","tui","cli"]
-categories = ["command-line-utilies"]
 
 [dependencies]
 clap = { version = "4.6.0", features = ["derive"] }
