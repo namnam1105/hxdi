@@ -1,9 +1,9 @@
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout, Rect},
+    layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph},
 };
 
 use crate::tui::app::App;
@@ -28,8 +28,28 @@ fn auto_bpr(show_hex: bool, show_ascii: bool, available: u16) -> usize {
     }
 }
 
+const MIN_WIDTH: u16 = 40;
+const MIN_HEIGHT: u16 = 8;
+// Width at which all hints fit on one line (sum of all item display chars + badge)
+const HINTS_FULL_WIDTH: u16 = 106;
+
 pub fn draw(f: &mut Frame, app: &mut App) {
-    let frame_width = f.area().width;
+    let area = f.area();
+    if area.width < MIN_WIDTH || area.height < MIN_HEIGHT {
+        let msg = format!(
+            "Terminal too small ({}×{} — need {}×{})",
+            area.width, area.height, MIN_WIDTH, MIN_HEIGHT
+        );
+        f.render_widget(
+            Paragraph::new(msg)
+                .alignment(Alignment::Center)
+                .style(Style::new().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            centered_rect(area.width, 1, area),
+        );
+        return;
+    }
+
+    let frame_width = area.width;
     app.frame_width = frame_width;
 
     let base_digits = auto_offset_digits(app.data.len());
@@ -53,13 +73,19 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let ascii_w: u16 = if app.show_ascii { bpr as u16 + 2 } else { 0 };
     app.sep_col = offset_w + hex_min_w;
 
+    let hints_h: u16 = if frame_width >= HINTS_FULL_WIDTH {
+        1
+    } else {
+        2
+    };
+
     // Vertical: title | separator | header | editor | hints
     let vert = Layout::vertical([
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(if app.show_header { 1 } else { 0 }),
         Constraint::Min(3),
-        Constraint::Length(1),
+        Constraint::Length(hints_h),
     ])
     .split(f.area());
 
@@ -100,6 +126,13 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         render_ascii(f, app, ed_horiz[3]);
     }
     render_hints(f, app, vert[4]);
+
+    match &app.dialog {
+        Dialog::UnsavedChanges(focus) => render_unsaved_dialog(f, *focus),
+        Dialog::Find(state) => render_find_dialog(f, state),
+        Dialog::Goto(state) => render_goto_dialog(f, state),
+        Dialog::None => {}
+    }
 }
 
 fn render_title(f: &mut Frame, app: &App, area: Rect) {
@@ -301,6 +334,113 @@ fn render_ascii(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(Paragraph::new(lines), inner);
 }
 
+fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
+    Rect {
+        x: area.x + area.width.saturating_sub(width) / 2,
+        y: area.y + area.height.saturating_sub(height) / 2,
+        width: width.min(area.width),
+        height: height.min(area.height),
+    }
+}
+
+fn render_unsaved_dialog(f: &mut Frame, focus: UnsavedFocus) {
+    let area = centered_rect(46, 7, f.area());
+    f.render_widget(Clear, area);
+
+    let block = Block::default()
+        .title(" Unsaved Changes ")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded);
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let vt = Layout::vertical([
+        Constraint::Min(0),
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(2),
+    ])
+    .split(inner);
+
+    f.render_widget(
+        Paragraph::new("Save changes before quitting?").alignment(Alignment::Center),
+        vt[1],
+    );
+
+    let btn = |label: &str, active: bool| {
+        Span::styled(
+            format!(" {label} "),
+            if active {
+                Style::new().reversed()
+            } else {
+                Style::new()
+            },
+        )
+    };
+    let buttons = Line::from(vec![
+        btn("[ Save ]", focus == UnsavedFocus::Save),
+        Span::raw("  "),
+        btn("[ Don't Save ]", focus == UnsavedFocus::DontSave),
+        Span::raw("  "),
+        btn("[ Cancel ]", focus == UnsavedFocus::Cancel),
+    ]);
+    f.render_widget(Paragraph::new(buttons).alignment(Alignment::Center), vt[3]);
+}
+
+fn render_input_dialog(
+    f: &mut Frame,
+    title: &str,
+    input_line: String,
+    mode_label: &str,
+    hint: &str,
+) {
+    let area = centered_rect(52, 5, f.area());
+    f.render_widget(Clear, area);
+    let block = Block::default()
+        .title(format!(" {title} "))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded);
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+    let vt = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).split(inner);
+    let cursor = if input_line.is_empty() { "_" } else { "" };
+    f.render_widget(Paragraph::new(format!("> {input_line}{cursor}")), vt[0]);
+    let bottom = Line::from(vec![
+        Span::styled(format!(" {mode_label} "), Style::new().reversed()),
+        Span::raw(format!("  {hint}")),
+    ]);
+    f.render_widget(Paragraph::new(bottom), vt[1]);
+}
+
+fn render_find_dialog(f: &mut Frame, state: &FindState) {
+    let mode = match state.mode {
+        SearchMode::Ascii => "ascii",
+        SearchMode::Hex => "hex",
+    };
+    render_input_dialog(
+        f,
+        "Find",
+        state.input.clone(),
+        mode,
+        "Enter: next  Tab: mode  Esc: close",
+    );
+}
+
+fn render_goto_dialog(f: &mut Frame, state: &GotoState) {
+    let (mode, prefix) = match state.mode {
+        GotoMode::Offset => ("offset", "0x"),
+        GotoMode::Value => ("value", ""),
+        GotoMode::Ascii => ("ascii", ""),
+    };
+    render_input_dialog(
+        f,
+        "Goto",
+        format!("{prefix}{}", state.input),
+        mode,
+        "Enter: jump  Tab: mode  Esc: close",
+    );
+}
+
 fn render_hints(f: &mut Frame, app: &App, area: Rect) {
     let mut mode_str = match app.edit_mode {
         EditMode::Overwrite => "OVR",
@@ -320,29 +460,59 @@ fn render_hints(f: &mut Frame, app: &App, area: Rect) {
 
     let key = Style::new().reversed();
     let sep = Style::new();
+    let badge = format!("[{mode_str}]");
 
-    let line = Line::from(vec![
-        Span::styled("^X", key),
-        Span::styled(" Quit  ", sep),
-        // Span::styled("^S", key),
-        // Span::styled(" Save  ", sep),
-        // Span::styled("^F", key),
-        // Span::styled(" Find  ", sep),
-        // Span::styled("^G", key),
-        // Span::styled(" Goto  ", sep),
-        // Span::styled("^E", key), // coming soon..
-        // Span::styled(" Toggle  ", sep),
-        Span::styled("Tab", key),
-        Span::styled(" Switch  ", sep),
-        Span::styled(",./[]", key),
-        Span::styled(" Resize  ", sep),
-        Span::styled("^C", key),
-        Span::styled(" Copy  ", sep),
-        Span::styled("⇧+↕↔", key),
-        Span::styled("/drag", sep),
-        Span::styled(" Select  ", sep),
-        Span::styled(format!("[{mode_str}]"), key),
-    ]);
+    let items: &[(&str, &str)] = &[
+        ("^X", " Quit  "),
+        ("^S", " Save  "),
+        ("^F", " Find  "),
+        ("^G", " Goto  "),
+        ("Ins", " Mode  "),
+        ("Tab", " Switch  "),
+        (",./[]", " Resize  "),
+        ("^C", " Copy  "),
+        ("⇧+↕↔", "/drag Select  "),
+    ];
 
-    f.render_widget(Paragraph::new(line), area);
+    let row_w = area.width as usize;
+    let badge_w = badge.chars().count();
+
+    if area.height >= 2 {
+        // Fill row 0, overflow to row 1, badge ends row 1
+        let rows = Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).split(area);
+        let mut r0: Vec<Span> = Vec::new();
+        let mut r1: Vec<Span> = Vec::new();
+        let mut used0 = 0usize;
+        let mut overflow = false;
+        for (k, v) in items {
+            let w = k.chars().count() + v.chars().count();
+            if !overflow && used0 + w <= row_w {
+                r0.push(Span::styled(*k, key));
+                r0.push(Span::styled(*v, sep));
+                used0 += w;
+            } else {
+                overflow = true;
+                r1.push(Span::styled(*k, key));
+                r1.push(Span::styled(*v, sep));
+            }
+        }
+        r1.push(Span::styled(badge, key));
+        f.render_widget(Paragraph::new(Line::from(r0)), rows[0]);
+        f.render_widget(Paragraph::new(Line::from(r1)), rows[1]);
+    } else {
+        // Single row: add items until full, badge at end
+        let mut spans: Vec<Span> = Vec::new();
+        let mut used = badge_w;
+        for (k, v) in items {
+            let w = k.chars().count() + v.chars().count();
+            if used + w > row_w {
+                break;
+            }
+            spans.push(Span::styled(*k, key));
+            spans.push(Span::styled(*v, sep));
+            used += w;
+        }
+        spans.push(Span::styled(badge, key));
+        f.render_widget(Paragraph::new(Line::from(spans)), area);
+    }
 }

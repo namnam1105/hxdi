@@ -4,9 +4,11 @@ use crossterm::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind
 pub fn handle_event(app: &mut App, event: Event) -> Action {
     match event {
         Event::Mouse(m) => handle_mouse(app, m),
-        _ => match &app.dialog {
+        _ => match app.dialog.clone() {
             Dialog::None => handle_normal(app, event),
-            _ => Action::None,
+            Dialog::UnsavedChanges(focus) => handle_unsaved(app, focus, event),
+            Dialog::Find(state) => handle_find(app, state, event),
+            Dialog::Goto(state) => handle_goto(app, state, event),
         },
     }
 }
@@ -21,7 +23,13 @@ fn handle_mouse(app: &mut App, event: crossterm::event::MouseEvent) -> Action {
             } else if let Some(idx) = mouse_to_byte(app, event.column, event.row) {
                 app.sel_anchor = None;
                 app.cursor = idx;
-                app.drag_origin = Some(idx); // remember click origin for drag-select
+                app.drag_origin = Some(idx);
+                app.nibble = NibbleHalf::High;
+                if app.show_hex && event.column >= app.hex_content_x && event.column < app.hex_content_x + app.hex_content_w {
+                    app.active_pane = ActivePane::Hex;
+                } else if app.show_ascii && event.column >= app.ascii_content_x && event.column < app.ascii_content_x + app.ascii_content_w {
+                    app.active_pane = ActivePane::Ascii;
+                }
                 ensure_visible(app);
             } else {
                 app.drag_origin = None;
@@ -30,7 +38,8 @@ fn handle_mouse(app: &mut App, event: crossterm::event::MouseEvent) -> Action {
         }
         MouseEventKind::Drag(MouseButton::Left) if app.dragging => {
             // Resize bpr by dragging separator
-            let hex_inner = event.column
+            let hex_inner = event
+                .column
                 .saturating_sub(app.offset_w + 1)
                 .saturating_sub(1);
             app.bpr_override = Some(((hex_inner + 1) / 3).max(1) as usize);
@@ -70,14 +79,13 @@ fn mouse_to_byte(app: &App, col: u16, row: u16) -> Option<usize> {
     let content_row = row.checked_sub(app.editor_content_y)? as usize;
     let data_row = app.scroll_row + content_row;
 
-    if app.show_hex
-        && col >= app.hex_content_x
-        && col < app.hex_content_x + app.hex_content_w
-    {
+    if app.show_hex && col >= app.hex_content_x && col < app.hex_content_x + app.hex_content_w {
         let byte_col = ((col - app.hex_content_x) / 3) as usize;
         if byte_col < app.bytes_per_row {
             let idx = data_row * app.bytes_per_row + byte_col;
-            if idx < app.data.len() { return Some(idx); }
+            if idx < app.data.len() {
+                return Some(idx);
+            }
         }
     }
 
@@ -88,15 +96,197 @@ fn mouse_to_byte(app: &App, col: u16, row: u16) -> Option<usize> {
         let byte_col = (col - app.ascii_content_x) as usize;
         if byte_col < app.bytes_per_row {
             let idx = data_row * app.bytes_per_row + byte_col;
-            if idx < app.data.len() { return Some(idx); }
+            if idx < app.data.len() {
+                return Some(idx);
+            }
         }
     }
 
     None
 }
 
+fn handle_unsaved(app: &mut App, focus: UnsavedFocus, event: Event) -> Action {
+    let Event::Key(key) = event else {
+        return Action::None;
+    };
+    match key.code {
+        KeyCode::Left | KeyCode::Right => {
+            app.dialog = Dialog::UnsavedChanges(match focus {
+                UnsavedFocus::Save => {
+                    if key.code == KeyCode::Right {
+                        UnsavedFocus::DontSave
+                    } else {
+                        UnsavedFocus::Cancel
+                    }
+                }
+                UnsavedFocus::DontSave => {
+                    if key.code == KeyCode::Right {
+                        UnsavedFocus::Cancel
+                    } else {
+                        UnsavedFocus::Save
+                    }
+                }
+                UnsavedFocus::Cancel => {
+                    if key.code == KeyCode::Right {
+                        UnsavedFocus::Save
+                    } else {
+                        UnsavedFocus::DontSave
+                    }
+                }
+            });
+            Action::None
+        }
+        KeyCode::Enter => {
+            app.dialog = Dialog::None;
+            match focus {
+                UnsavedFocus::Save => Action::SaveQuit,
+                UnsavedFocus::DontSave => Action::Quit,
+                UnsavedFocus::Cancel => Action::None,
+            }
+        }
+        KeyCode::Esc => {
+            app.dialog = Dialog::None;
+            Action::None
+        }
+        _ => Action::None,
+    }
+}
+
+fn handle_find(app: &mut App, mut state: FindState, event: Event) -> Action {
+    let Event::Key(key) = event else {
+        return Action::None;
+    };
+    match key.code {
+        KeyCode::Esc => {
+            app.dialog = Dialog::None;
+            Action::None
+        }
+        KeyCode::Tab => {
+            state.mode = match state.mode {
+                SearchMode::Ascii => SearchMode::Hex,
+                SearchMode::Hex => SearchMode::Ascii,
+            };
+            app.dialog = Dialog::Find(state);
+            Action::None
+        }
+        KeyCode::Enter => {
+            let start = state.last_match.map(|m| m + 1).unwrap_or(app.cursor + 1);
+            let found = find_in_data(app, &state, start).or_else(|| find_in_data(app, &state, 0));
+            if let Some(pos) = found {
+                state.last_match = Some(pos);
+                app.cursor = pos;
+                app.sel_anchor = None;
+                ensure_visible(app);
+            } else if !state.input.is_empty() {
+                set_status(app, "Not found");
+            }
+            app.dialog = Dialog::Find(state);
+            Action::None
+        }
+        KeyCode::Backspace => {
+            state.input.pop();
+            state.last_match = None;
+            app.dialog = Dialog::Find(state);
+            Action::None
+        }
+        KeyCode::Char(c) => {
+            state.input.push(c);
+            state.last_match = None;
+            app.dialog = Dialog::Find(state);
+            Action::None
+        }
+        _ => Action::None,
+    }
+}
+
+fn handle_goto(app: &mut App, mut state: GotoState, event: Event) -> Action {
+    let Event::Key(key) = event else {
+        return Action::None;
+    };
+    match key.code {
+        KeyCode::Esc => {
+            app.dialog = Dialog::None;
+            Action::None
+        }
+        KeyCode::Tab => {
+            state.mode = match state.mode {
+                GotoMode::Offset => GotoMode::Value,
+                GotoMode::Value => GotoMode::Ascii,
+                GotoMode::Ascii => GotoMode::Offset,
+            };
+            state.input.clear();
+            app.dialog = Dialog::Goto(state);
+            Action::None
+        }
+        KeyCode::Enter => {
+            let target: Option<usize> = match state.mode {
+                GotoMode::Offset => {
+                    usize::from_str_radix(state.input.trim_start_matches("0x"), 16).ok()
+                }
+                GotoMode::Value => u8::from_str_radix(&state.input, 16)
+                    .ok()
+                    .and_then(|v| app.data.iter().position(|&b| b == v)),
+                GotoMode::Ascii => state
+                    .input
+                    .chars()
+                    .next()
+                    .and_then(|c| app.data.iter().position(|&b| b == c as u8)),
+            };
+            app.dialog = Dialog::None;
+            if let Some(pos) = target.filter(|&p| p < app.data.len()) {
+                app.cursor = pos;
+                app.sel_anchor = None;
+                ensure_visible(app);
+            } else {
+                set_status(app, "Invalid / out of range");
+            }
+            Action::None
+        }
+        KeyCode::Backspace => {
+            state.input.pop();
+            app.dialog = Dialog::Goto(state);
+            Action::None
+        }
+        KeyCode::Char(c) => {
+            state.input.push(c);
+            app.dialog = Dialog::Goto(state);
+            Action::None
+        }
+        _ => Action::None,
+    }
+}
+
+fn find_in_data(app: &App, state: &FindState, from: usize) -> Option<usize> {
+    let pattern: Vec<u8> = match state.mode {
+        SearchMode::Ascii => state.input.bytes().collect(),
+        SearchMode::Hex => {
+            let s: String = state
+                .input
+                .chars()
+                .filter(|c| !c.is_ascii_whitespace())
+                .collect();
+            if s.is_empty() || s.len() % 2 != 0 {
+                return None;
+            }
+            s.as_bytes()
+                .chunks(2)
+                .map(|c| u8::from_str_radix(std::str::from_utf8(c).ok()?, 16).ok())
+                .collect::<Option<Vec<u8>>>()?
+        }
+    };
+    if pattern.is_empty() {
+        return None;
+    }
+    app.data[from..]
+        .windows(pattern.len())
+        .position(|w| w == pattern.as_slice())
+        .map(|i| from + i)
+}
+
 fn handle_normal(app: &mut App, event: Event) -> Action {
-    let Event::Key(key) = event else { return Action::None; };
+    let Event::Key(key) = event else {
+        return Action::None;
+    };
 
     match (key.modifiers, key.code) {
         // quit / save
@@ -109,8 +299,32 @@ fn handle_normal(app: &mut App, event: Event) -> Action {
             }
         }
         (KeyModifiers::CONTROL, KeyCode::Char('s')) => {
+            if app.edit_mode == EditMode::ReadOnly {
+                set_status(app, "Read-only");
+                return Action::None;
+            }
             set_status(app, "Saved.");
+            app.original = app.data.clone();
             Action::SaveFile
+        }
+
+        // open dialogs / toggle mode
+        (KeyModifiers::CONTROL, KeyCode::Char('f')) => {
+            app.dialog = Dialog::Find(FindState::default());
+            Action::None
+        }
+        (KeyModifiers::CONTROL, KeyCode::Char('g')) => {
+            app.dialog = Dialog::Goto(GotoState::default());
+            Action::None
+        }
+        (KeyModifiers::CONTROL, KeyCode::Char('e')) => {
+            if app.edit_mode != EditMode::ReadOnly {
+                app.edit_mode = match app.edit_mode {
+                    EditMode::Overwrite => EditMode::Insert,
+                    _ => EditMode::Overwrite,
+                };
+            }
+            Action::None
         }
 
         // copy (pane-aware, selection-aware)
@@ -166,22 +380,30 @@ fn handle_normal(app: &mut App, event: Event) -> Action {
 
         // selection movement (SHIFT+arrows)
         (KeyModifiers::SHIFT, KeyCode::Left) => {
-            if app.sel_anchor.is_none() { app.sel_anchor = Some(app.cursor); }
+            if app.sel_anchor.is_none() {
+                app.sel_anchor = Some(app.cursor);
+            }
             move_cursor(app, -1);
             Action::None
         }
         (KeyModifiers::SHIFT, KeyCode::Right) => {
-            if app.sel_anchor.is_none() { app.sel_anchor = Some(app.cursor); }
+            if app.sel_anchor.is_none() {
+                app.sel_anchor = Some(app.cursor);
+            }
             move_cursor(app, 1);
             Action::None
         }
         (KeyModifiers::SHIFT, KeyCode::Up) => {
-            if app.sel_anchor.is_none() { app.sel_anchor = Some(app.cursor); }
+            if app.sel_anchor.is_none() {
+                app.sel_anchor = Some(app.cursor);
+            }
             move_cursor(app, -(app.bytes_per_row as i64));
             Action::None
         }
         (KeyModifiers::SHIFT, KeyCode::Down) => {
-            if app.sel_anchor.is_none() { app.sel_anchor = Some(app.cursor); }
+            if app.sel_anchor.is_none() {
+                app.sel_anchor = Some(app.cursor);
+            }
             move_cursor(app, app.bytes_per_row as i64);
             Action::None
         }
@@ -189,7 +411,7 @@ fn handle_normal(app: &mut App, event: Event) -> Action {
         // pane switch
         (KeyModifiers::NONE, KeyCode::Tab) => {
             app.active_pane = match app.active_pane {
-                ActivePane::Hex   => ActivePane::Ascii,
+                ActivePane::Hex => ActivePane::Ascii,
                 ActivePane::Ascii => ActivePane::Hex,
             };
             app.nibble = NibbleHalf::High;
@@ -213,6 +435,50 @@ fn handle_normal(app: &mut App, event: Event) -> Action {
         }
         (KeyModifiers::NONE, KeyCode::Char(']')) => {
             app.offset_extra += 1;
+            Action::None
+        }
+
+        // hex pane: overwrite nibble by nibble
+        (KeyModifiers::NONE, KeyCode::Char(c))
+            if app.active_pane == ActivePane::Hex && c.is_ascii_hexdigit() =>
+        {
+            if app.edit_mode == EditMode::ReadOnly {
+                set_status(app, "Read-only");
+                return Action::None;
+            }
+            let d = c.to_digit(16).unwrap() as u8;
+            match app.nibble {
+                NibbleHalf::High => {
+                    app.pending_nibble = d;
+                    app.nibble = NibbleHalf::Low;
+                }
+                NibbleHalf::Low => {
+                    let byte = (app.pending_nibble << 4) | d;
+                    if app.edit_mode == EditMode::Insert {
+                        app.data.insert(app.cursor, byte);
+                    } else {
+                        app.data[app.cursor] = byte;
+                    }
+                    app.nibble = NibbleHalf::High;
+                    move_cursor(app, 1);
+                }
+            }
+            Action::None
+        }
+
+        // ascii pane: overwrite byte
+        (KeyModifiers::NONE, KeyCode::Char(c)) if app.active_pane == ActivePane::Ascii => {
+            if app.edit_mode == EditMode::ReadOnly {
+                set_status(app, "Read-only");
+                return Action::None;
+            }
+            if app.edit_mode == EditMode::Insert {
+                app.data.insert(app.cursor, c as u8);
+                move_cursor(app, 1);
+            } else if !app.data.is_empty() {
+                app.data[app.cursor] = c as u8;
+                move_cursor(app, 1);
+            }
             Action::None
         }
 
@@ -254,22 +520,27 @@ fn copy_selection(app: &mut App) {
         ActivePane::Ascii => bytes
             .iter()
             .map(|&b| {
-                if (32..=126).contains(&b) { (b as char).to_string() }
-                else { format!("\\x{:02x}", b) }
+                if (32..=126).contains(&b) {
+                    (b as char).to_string()
+                } else {
+                    format!("\\x{:02x}", b)
+                }
             })
             .collect::<String>(),
     };
 
     copy_osc52(&text);
-    let label = if bytes.len() == 1 { "1 byte".to_string() } else { format!("{} bytes", bytes.len()) };
+    let label = if bytes.len() == 1 {
+        "1 byte".to_string()
+    } else {
+        format!("{} bytes", bytes.len())
+    };
     set_status(app, &format!("Copied {label}"));
 }
 
 fn set_status(app: &mut App, msg: &str) {
     app.status_msg = Some(msg.to_string());
-    app.status_msg_until = Some(
-        std::time::Instant::now() + std::time::Duration::from_secs(3),
-    );
+    app.status_msg_until = Some(std::time::Instant::now() + std::time::Duration::from_secs(3));
 }
 
 fn copy_osc52(text: &str) {
@@ -289,8 +560,16 @@ fn base64_encode(data: &[u8]) -> String {
         let n = (b0 << 16) | (b1 << 8) | b2;
         out.push(CHARS[((n >> 18) & 63) as usize] as char);
         out.push(CHARS[((n >> 12) & 63) as usize] as char);
-        out.push(if chunk.len() > 1 { CHARS[((n >> 6) & 63) as usize] as char } else { '=' });
-        out.push(if chunk.len() > 2 { CHARS[(n & 63) as usize] as char } else { '=' });
+        out.push(if chunk.len() > 1 {
+            CHARS[((n >> 6) & 63) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            CHARS[(n & 63) as usize] as char
+        } else {
+            '='
+        });
     }
     out
 }

@@ -52,6 +52,7 @@ impl App {
     pub fn new(
         data: Vec<u8>,
         file_name: Option<String>,
+        read_only: bool,
         color: bool,
         show_header: bool,
         show_offsets: bool,
@@ -70,7 +71,7 @@ impl App {
             cursor: 0,
             nibble: NibbleHalf::High,
             pending_nibble: 0,
-            edit_mode: EditMode::Overwrite,
+            edit_mode: if read_only { EditMode::ReadOnly } else { EditMode::Overwrite },
             active_pane: ActivePane::Hex,
             dialog: Dialog::None,
             status_msg: None,

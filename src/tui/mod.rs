@@ -39,6 +39,7 @@ use app::App;
 pub fn run(
     data: Vec<u8>,
     file_name: Option<String>,
+    read_only: bool,
     color: bool,
     show_header: bool,
     show_offsets: bool,
@@ -51,6 +52,7 @@ pub fn run(
     let mut app = App::new(
         data,
         file_name,
+        read_only,
         color,
         show_header,
         show_offsets,
