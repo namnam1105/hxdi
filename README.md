@@ -1,38 +1,54 @@
+<div align="center">
+
 # hxdi
 
-hxdi is a flexible hex-editor, allows flexible dumping options,
-written in Rust, having near C dumping performance.
+![Rust](https://img.shields.io/badge/rust-stable-orange?logo=rust&style=for-the-badge)
+![License](https://img.shields.io/crates/l/hxdi?style=for-the-badge)
+![Version](https://img.shields.io/crates/v/hxdi?style=for-the-badge)
+![Downloads](https://img.shields.io/crates/d/hxdi?style=for-the-badge)
 
-## how 2 use and compile
+*a fast, flexible hex editor for the terminal — written in Rust with near-C dump performance and a nano-style TUI.*
 
-### compile
+</div>
 
-1. clone this repository
-2. you need rust and cargo
-3. cargo build --release
+---
 
-### use
+## features
 
-Usage: hxdi [OPTIONS] [FILE_NAME]
+- near-C performance dumper
+- interactive TUI with nano-like controls
+- colored output with batched ANSI escapes
+- auto-adjusting `bytes_per_row` based on terminal width
+- fully configurable via CLI flags — disable any column, bypass file size warnings
 
-Arguments:
-[FILE_NAME]  The file name to read from
+## install
 
-Options:
-* -t, --tui-no          This disables the interactive TUI interface (read-only)
-* -d, --disable-header  This disables the table header
-* -c, --color-no        This disables colored output
-* -o, --offsets-no      This disables the offset column
-* -n, --no-hex          This disables the hex data output
-* -a, --ascii-no        This disables the ascii data output
-* -f, --force-large     Ignore the large file warning
-* -h, --help            Print help
-* -V, --version         Print version
+```bash
+cargo install hxdi
+```
 
-## plans
+## build from source
 
-* [x] first working build
-* [x] readme
-* [x] license
-* [x] unit tests
-* [x] integrate `ratatui`
+```bash
+git clone https://github.com/namnam1105/hxdi.git
+cd hxdi
+cargo build --release
+```
+
+## usage
+| flag | description |
+|------|-------------|
+| `-t, --tui-no` | disable TUI, dump to stdout (read-only) |
+| `-d, --disable-header` | disable column header |
+| `-c, --color-no` | disable colored output |
+| `-o, --offsets-no` | disable offset column |
+| `-n, --no-hex` | disable hex column |
+| `-a, --ascii-no` | disable ASCII column |
+| `-f, --force-large` | skip 100 MB file size warning |
+
+## roadmap
+
+- [x] dump mode
+- [x] `ratatui` TUI (read, overwrite, insert)
+- [x] publish to crates.io
+- [ ] do something ig
