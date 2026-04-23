@@ -53,3 +53,11 @@ cargo build --release
 - [x] `ratatui` TUI (read, overwrite, insert)
 - [x] publish to crates.io
 - [ ] do something ig
+
+## contributing
+
+issues and PRs are welcome. a few things to keep in mind:
+
+- use [conventional commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:` etc.)
+- run `cargo test --tests` before submitting
+- keep hot-path code (`hex_read.rs`) allocation-free — no `format!()` or `Vec` inside loops
