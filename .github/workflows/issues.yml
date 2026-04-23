@@ -1,0 +1,31 @@
+name: Issue Helper
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `Thanks for opening an issue!
+              
+To help resolve it faster, please include:
+
+- **hxdi version** (\`hxdi --version\`)
+- **OS and architecture** (e.g. Linux x86_64, macOS arm64, Windows 11)
+- **terminal emulator** (e.g. kitty, alacritty, wezterm)
+- **steps to reproduce**
+- **expected vs actual behavior**
+
+If this is a **bug in TUI mode**, also include your terminal \`$TERM\` value.`
+            })
