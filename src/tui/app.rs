@@ -1,3 +1,21 @@
+/*
+hxdi - a TUI hex editor
+Copyright (C) 2026 namnam1105
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 use crate::tui::types::*;
 
 pub struct App {
@@ -71,7 +89,11 @@ impl App {
             cursor: 0,
             nibble: NibbleHalf::High,
             pending_nibble: 0,
-            edit_mode: if read_only { EditMode::ReadOnly } else { EditMode::Overwrite },
+            edit_mode: if read_only {
+                EditMode::ReadOnly
+            } else {
+                EditMode::Overwrite
+            },
             active_pane: ActivePane::Hex,
             dialog: Dialog::None,
             status_msg: None,
@@ -97,9 +119,15 @@ impl App {
         }
     }
 
-    pub fn is_dirty(&self) -> bool { self.data != self.original }
-    pub fn cursor_row(&self) -> usize { self.cursor / self.bytes_per_row }
-    pub fn cursor_col(&self) -> usize { self.cursor % self.bytes_per_row }
+    pub fn is_dirty(&self) -> bool {
+        self.data != self.original
+    }
+    pub fn cursor_row(&self) -> usize {
+        self.cursor / self.bytes_per_row
+    }
+    pub fn cursor_col(&self) -> usize {
+        self.cursor % self.bytes_per_row
+    }
     pub fn total_rows(&self) -> usize {
         self.data.len().saturating_sub(1) / self.bytes_per_row + 1
     }

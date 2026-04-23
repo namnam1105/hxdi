@@ -1,3 +1,21 @@
+/*
+hxdi - a TUI hex editor
+Copyright (C) 2026 namnam1105
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 use crate::tui::{actions::Action, app::App, types::*};
 use crossterm::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind};
 
@@ -25,9 +43,15 @@ fn handle_mouse(app: &mut App, event: crossterm::event::MouseEvent) -> Action {
                 app.cursor = idx;
                 app.drag_origin = Some(idx);
                 app.nibble = NibbleHalf::High;
-                if app.show_hex && event.column >= app.hex_content_x && event.column < app.hex_content_x + app.hex_content_w {
+                if app.show_hex
+                    && event.column >= app.hex_content_x
+                    && event.column < app.hex_content_x + app.hex_content_w
+                {
                     app.active_pane = ActivePane::Hex;
-                } else if app.show_ascii && event.column >= app.ascii_content_x && event.column < app.ascii_content_x + app.ascii_content_w {
+                } else if app.show_ascii
+                    && event.column >= app.ascii_content_x
+                    && event.column < app.ascii_content_x + app.ascii_content_w
+                {
                     app.active_pane = ActivePane::Ascii;
                 }
                 ensure_visible(app);
