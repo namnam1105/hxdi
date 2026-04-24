@@ -1,6 +1,6 @@
 [package]
 name = "hxdi"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2024"
 description = "a fast, flexible hex editor with nano-style TUI"
 authors = ["namnam1105"]
