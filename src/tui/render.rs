@@ -17,11 +17,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 use ratatui::{
-    Frame,
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, Paragraph},
+    Frame,
 };
 
 use crate::tui::app::App;
@@ -485,7 +485,7 @@ fn render_hints(f: &mut Frame, app: &App, area: Rect) {
         ("^S", " Save  "),
         ("^F", " Find  "),
         ("^G", " Goto  "),
-        ("Ins", " Mode  "),
+        ("^E", " Mode  "),
         ("Tab", " Switch  "),
         (",./[]", " Resize  "),
         ("^C", " Copy  "),
