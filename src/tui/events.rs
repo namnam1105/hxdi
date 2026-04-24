@@ -17,11 +17,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 use crate::tui::{actions::Action, app::App, types::*};
-use crossterm::event::{Event, KeyCode, KeyModifiers, MouseButton, MouseEventKind};
+use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers, MouseButton, MouseEventKind};
 
 pub fn handle_event(app: &mut App, event: Event) -> Action {
     match event {
         Event::Mouse(m) => handle_mouse(app, m),
+        // Windows terminals emit both Press and Release; ignore Release to prevent double-firing.
+        Event::Key(ref k) if k.kind == KeyEventKind::Release => Action::None,
         _ => match app.dialog.clone() {
             Dialog::None => handle_normal(app, event),
             Dialog::UnsavedChanges(focus) => handle_unsaved(app, focus, event),
@@ -432,11 +434,12 @@ fn handle_normal(app: &mut App, event: Event) -> Action {
             Action::None
         }
 
-        // pane switch
+        // pane switch — only move to a pane that is actually visible
         (KeyModifiers::NONE, KeyCode::Tab) => {
             app.active_pane = match app.active_pane {
-                ActivePane::Hex => ActivePane::Ascii,
-                ActivePane::Ascii => ActivePane::Hex,
+                ActivePane::Hex if app.show_ascii => ActivePane::Ascii,
+                ActivePane::Ascii if app.show_hex => ActivePane::Hex,
+                other => other,
             };
             app.nibble = NibbleHalf::High;
             Action::None

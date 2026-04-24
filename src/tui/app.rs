@@ -94,7 +94,7 @@ impl App {
             } else {
                 EditMode::Overwrite
             },
-            active_pane: ActivePane::Hex,
+            active_pane: if show_hex { ActivePane::Hex } else { ActivePane::Ascii },
             dialog: Dialog::None,
             status_msg: None,
             status_msg_until: None,
